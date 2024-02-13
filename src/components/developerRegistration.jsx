@@ -2,10 +2,12 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { v4 as uuidv4 } from "uuid";
-import { supabase } from "../../supabase.js";
 import { useRouter } from "next/navigation";
+import insertUser from "@/db-components/insertUser.js";
+import insertDevUserPref from "@/db-components/insertDevUserPref";
 
 export default function DeveloperRegistration() {
+
   const [registration, setRegistration] = useState({
     first_name: "",
     surname: "",
@@ -23,35 +25,49 @@ export default function DeveloperRegistration() {
 
   const [regSuccess, setRegSuccess] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [isValid, setIsValid] = useState(true);
-  const [submissionMessage, setSubmissionMessage] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
-  const handleInput = (e) => {
+  const submissionMessage = "Thank you for registering with BUILD !";
+  
+    //HANDLE THE INPUT OF THE TEXT FIELDS
+    const handleInput = (e) => {
     const fieldName = e.target.name;
     const fieldValue = e.target.value;
 
+    //Password format is validated at this point
     if (fieldName === "password") {
-      validatePassword(fieldValue);
-    }
-
+      validatePassword(fieldValue);}
+  
+      //Update the form fieldvwith latest value
     setRegistration((prevState) => ({
       ...prevState,
       [fieldName]: fieldValue,
     }));
   };
 
+  //VALIDATION FOR PASSWORD FORMAT
+  const validatePassword = (password) => {
+    const passwordRegex =
+      /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{6,}$/;
+
+    if (!passwordRegex.test(password)) {
+      setPasswordError("Password must be at least 6 characters and include a number, a capital letter, and a special character.");
+     } else {
+       setPasswordError("");
+     }
+  };
+
+  //HANDLE THE INPUT OF THE CHECKBOX FIELDS
   const handleChkBoxInput = (e) => {
     const { name, type, checked, value } = e.target;
-
+   
     setRegistration((prevState) => ({
       ...prevState,
       [name]: type === "checkbox" ? checked : value,
-    }));
+      }));
   };
 
-  // ...
-
+  //VALIDATE THE FINAL FORM INPUT
   const validateForm = () => {
     const isValidEmailFormat = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
       registration.email
@@ -67,107 +83,91 @@ export default function DeveloperRegistration() {
       isValidEmailFormat &&
       registration.password &&
       registration.password === registration.confirm_password;
+      registration.t_and_c; 
 
     if (!isValidEmailFormat) {
       alert("Please enter a valid email address.");
-    }
+       }
 
-    registration.t_and_c && setIsValid(isValidForm);
+    if (registration.password != registration.confirm_password) {
+      alert("Please make sure your passwords match");
+      }
+
+    if (!isValidForm) {
+      alert("Please complete all required fields");
+       }
 
     return isValidForm;
   };
 
-  const validatePassword = (password) => {
-    const passwordRegex =
-      /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{6,}$/;
-
-    if (!passwordRegex.test(password)) {
-      setPasswordError(
-        "Password must be at least 6 characters and include a number, a capital letter, and a special character."
-      );
-      return false;
-    } else {
-      setPasswordError("");
-      return true;
-    }
-  };
-
+  
+//SUMBIT THE REGISTRATION TO THE DATABASE
   const submitReg = async (e) => {
     e.preventDefault();
 
-    if (!validateForm()) {
-      alert(
-        "Please fill in all required fields and make sure passwords match."
-      );
-      return;
-    }
+    if (!validateForm()) {return;}
 
     // Pass the registration form data to the database to complete the registration.
     // This is achieved by inserting a main_users row for the new user and then attaching a dev_user_pref table row to that new user
 
+    const usersId = uuidv4();
     // Insert the new user into the main_users table
 
-    const usersId = uuidv4();
-    try {
-      const { error } = await supabase.from("main_users").insert({
+    const userToAdd = {
+      id: usersId,
+      email: registration.email,
+      type: "DEV",
+      password: registration.password,
+    };
+
+    const result = await insertUser(userToAdd); 
+    if (!result){ 
+      return;} 
+    else {
+     
+      // Now Insert the new users preferences into the dev_user_pref table
+      const devUserPrefToAdd = {
         id: usersId,
-        email: registration.email,
-        type: "DEV",
-        password: registration.password,
-      });
-      if (error) {
-        console.log(error);
-        return;
-      } else {
-        // Now Insert the new users preferences into the dev_user_pref table
-        try {
-          const { error2 } = await supabase.from("dev_user_pref").insert({
-            id: usersId,
-            first_name: registration.first_name,
-            surname: registration.surname,
-            contact_number: registration.contact_number,
-            tech_background: registration.tech_background,
-            t_and_c: registration.t_and_c,
-            hours_range: registration.hours_range,
-            possible_mentor: registration.possible_mentor,
+        first_name: registration.first_name,
+        surname: registration.surname,
+        contact_number: registration.contact_number,
+        tech_background: registration.tech_background,
+        t_and_c: registration.t_and_c,
+        hours_range: registration.hours_range,
+        possible_mentor: registration.possible_mentor,
+        };
+    
+      const result = await insertDevUserPref(devUserPrefToAdd); 
+        
+      if (!result){ 
+        return;} 
+      else {
+                   
+        // Both database insets are successful so refresh the page.
+        setRegSuccess(true);
+        setRegistration({
+          first_name: "",
+          surname: "",
+          contact_number: "",
+          tech_background: "",
+          hours_range: "",
+          email: "",
+          possible_mentor: "",
+          password: "",
+          confirm_password: "",
+          t_and_c: "",
           });
-          if (error2) {
-            console.log(error2);
-            return;
 
-            // Both database insets are successful so refresh the page.
-          } else {
-            setRegSuccess(true);
-            setRegistration({
-              first_name: "",
-              surname: "",
-              contact_number: "",
-              tech_background: "",
-              hours_range: "",
-              email: "",
-              possible_mentor: "",
-              password: "",
-              confirm_password: "",
-              t_and_c: "",
-            });
-            localStorage.setItem("userId", usersId);
-            setSubmissionMessage("Thank you for your submission!");
+          localStorage.setItem("userId", usersId);
+  
+          setTimeout(() => {
+          router.push("/developers/dashboard");
+          }, 3000);
 
-            setTimeout(() => {
-              router.push("/developers/dashboard");
-            }, 3000);
-
-            return;
-          }
-        } catch (error) {
-          console.log("Failed to add to dev_user_pref");
           return;
+          }
         }
-      }
-    } catch (error) {
-      console.log("Failed to add to main_users");
-      return;
-    }
+  
   };
 
   return (
@@ -184,8 +184,6 @@ export default function DeveloperRegistration() {
         ) : (
           <form
             className="bg-slate-50 mt-5 tracking-wider flex flex-col w-full lg:grid lg:grid-cols-2 lg:gap-10 gap-5"
-            method="POST"
-            action="https://team-5-final-project-pi.vercel.app/developer/register"
             onSubmit={submitReg}
           >
             <div>
@@ -196,7 +194,7 @@ export default function DeveloperRegistration() {
                 value={registration.first_name}
                 className="appearance-none bg-transparent border-b pb-2 border-gray-600 placeholder:text-gray-600 placeholder:text-xl w-full text-black mr-3 py-1 px-2 leading-tight focus:outline-none"
                 placeholder="First Name:"
-                required
+               // required
               />
             </div>
             <div>
@@ -207,7 +205,7 @@ export default function DeveloperRegistration() {
                 value={registration.surname}
                 className="appearance-none bg-transparent border-b pb-2 border-gray-600 placeholder:text-gray-600 placeholder:text-xl w-full text-black mr-3 py-1 px-2 leading-tight focus:outline-none"
                 placeholder="Last Name:"
-                required
+                //required
               />
             </div>
             <div>
@@ -216,10 +214,9 @@ export default function DeveloperRegistration() {
                 name="contact_number"
                 onChange={handleInput}
                 value={registration.contact_number}
-                pattern="[0-9]*"
                 className="appearance-none bg-transparent border-b pb-2 border-gray-600 placeholder:text-gray-600 placeholder:text-xl w-full text-black mr-3 py-1 px-2 leading-tight focus:outline-none"
                 placeholder="Contact Number:"
-                required
+                //required
               />
             </div>
 
@@ -234,7 +231,7 @@ export default function DeveloperRegistration() {
                   value={registration.email}
                   className="appearance-none bg-transparent border-b pb-2 border-gray-600 placeholder:text-gray-600 placeholder:text-xl w-full text-black mr-3 py-1 px-2 leading-tight focus:outline-none"
                   placeholder="Email:"
-                  required
+                 // required
                 />
               </div>
             </div>
@@ -246,14 +243,14 @@ export default function DeveloperRegistration() {
                 value={registration.password}
                 className="appearance-none bg-transparent border-b pb-2 border-gray-600 placeholder:text-gray-600 placeholder:text-xl w-full text-black mr-3 py-1 px-2 leading-tight focus:outline-none"
                 placeholder="Password:"
-                required
+                //required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="text-sm text-gray-600"
               >
-                {showPassword ? "Hide" : "Show"} Password
+                {showPassword ? "Hide" : "Show"} Passwords
               </button>
               {passwordError && (
                 <div className="text-red-500">{passwordError}</div>
@@ -268,8 +265,9 @@ export default function DeveloperRegistration() {
                 value={registration.confirm_password}
                 className="appearance-none bg-transparent border-b pb-2 border-gray-600 placeholder:text-gray-600 placeholder:text-xl w-full text-black mr-3 py-1 px-2 leading-tight focus:outline-none"
                 placeholder="Confirm Password:"
-                required
+               // required
               />
+              
             </div>
 
             <div>
@@ -279,7 +277,7 @@ export default function DeveloperRegistration() {
                 value={registration.hours_range}
                 className="bg-transparent border-b pb-2 border-gray-600 text-xl text-gray-600 placeholder:text-xl w-full mr-3 py-1 leading-tight focus:outline-none"
                 placeholder="Select your hour range"
-                required
+                //required
               >
                 <option value="" disabled>
                   Hours you can commit each week?
@@ -317,7 +315,7 @@ export default function DeveloperRegistration() {
                 onChange={handleInput}
                 value={registration.tech_background}
                 className="appearance-none bg-grey-200 border border-gray-600 bg-slate-50 placeholder:text-gray-600 placeholder:text-xl w-full h-40 text-black mr-3 py-1 px-2 leading-tight focus:outline-none lg:mb-4"
-                required
+                //required
               />
             </div>
             <div className="flex flex-col justify-between">
@@ -330,7 +328,7 @@ export default function DeveloperRegistration() {
                     onChange={handleChkBoxInput}
                     value={registration.t_and_c}
                     className="mr-2 mt-1 "
-                    required
+                    //required
                   />
                   Click here to agree to the{" "}
                   <Link href="../termsandconditions" target="_blank">
@@ -350,13 +348,7 @@ export default function DeveloperRegistration() {
                 </button>
               </div>
             </div>
-
-            {!isValid && (
-              <div className="text-red-500">
-                Please fill in all required fields.
-              </div>
-            )}
-          </form>
+                    </form>
         )}
       </div>
     </div>
